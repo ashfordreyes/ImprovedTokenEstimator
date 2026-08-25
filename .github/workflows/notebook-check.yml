@@ -1,0 +1,60 @@
+name: notebook-check
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # The notebook's setup cell tracks tce-library@main, so the library can drift out
+    # from under this notebook without anything here being touched. A weekly run is
+    # what notices — otherwise the first person to hit it would be someone in Colab.
+    - cron: "17 6 * * 1"
+
+jobs:
+  # Everything that can be checked from this repo alone. No dependency, so nothing
+  # outside this repo can stop it running.
+  notebook:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Match what Colab runs, so a version-specific break shows up here first.
+          python-version: "3.12"
+
+      - name: Structural checks
+        run: python tools/check_notebook.py --skip-drift improvedClaudeTokenEstimator.ipynb
+
+  # The drift check needs the real library, which means it can only run once
+  # tce-library is public and carries the package on main. Until then the install
+  # step fails and this job reports a warning instead of a red X — the checks above
+  # still gate the PR, and this one starts working on its own the moment the library
+  # is installable, with no edit here.
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tcelibrary from main
+        id: install
+        continue-on-error: true
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "git+https://github.com/ashfordreyes/tce-library@main"
+
+      - name: Check the notebook against it
+        if: steps.install.outcome == 'success'
+        run: python tools/check_notebook.py improvedClaudeTokenEstimator.ipynb
+
+      - name: Report that the library is not installable yet
+        if: steps.install.outcome != 'success'
+        run: |
+          echo "::warning title=Drift check skipped::Could not install tcelibrary from \
+          github.com/ashfordreyes/tce-library@main. Expected while that repo is private \
+          or before the package lands on its main branch. The notebook's own structural \
+          checks still ran. This job goes green by itself once the library installs."
