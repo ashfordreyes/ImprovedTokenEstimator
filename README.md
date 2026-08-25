@@ -1,0 +1,1 @@
+A maintained version of Anthropic’s token estimator Jupyter notebook. I am currently adding capability like supporting other AI providers, and hopefully a context feature where you can paste in a context window and then the prompt you want to add.
