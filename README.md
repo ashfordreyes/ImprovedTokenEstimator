@@ -29,13 +29,15 @@ Updating **mid-session** is the one case that needs a nudge — pip won't reinst
 
 ## CI
 
-`notebook-check.yml` installs `tcelibrary` from `main` and runs `tools/check_notebook.py`, which fails if:
+`notebook-check.yml` runs `tools/check_notebook.py` in two jobs, split by what they depend on.
 
-- a code cell stops parsing as Python,
-- the notebook calls a `tce.*` name the library no longer provides,
-- or an Anthropic API key turns up in a cell source or a committed output.
+**`notebook`** needs nothing outside this repo, so nothing outside this repo can stop it running. It fails if a code cell stops parsing as Python, or if an Anthropic API key turns up in a cell source or a committed output.
 
-The setup cell tracks `main` with no release gate, so this is what catches a library rename before someone hits it in Colab. It also runs weekly, since the library can drift without this repo being touched.
+**`drift`** installs `tcelibrary` from `main` and fails if the notebook calls a `tce.*` name the library no longer provides. The setup cell tracks `main` with no release in between, so this is what catches a rename before someone hits it in Colab. It also runs weekly, since the library can drift without this repo being touched.
+
+While `tce-library` is private — or before the package reaches its `main` — the install can't succeed, so `drift` reports a warning instead of a red X rather than blocking the repo on something it can't reach. It starts enforcing on its own once the library installs, with no edit here.
+
+`--skip-drift` narrows the check to the dependency-free half. It is not a way to silence a disagreement between the notebook and an installed library: with `tcelibrary` present, the full check is what runs, and it still fails on a leaked key or a syntax error either way.
 
 ## Still on the list
 

@@ -15,6 +15,7 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import ast
 import json
 import re
@@ -175,21 +176,36 @@ def check_secrets(notebook: dict) -> None:
 
 
 def main(argv: list[str]) -> int:
-    path = Path(argv[1] if len(argv) > 1 else DEFAULT_NOTEBOOK)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("notebook", nargs="?", default=DEFAULT_NOTEBOOK)
+    parser.add_argument(
+        "--skip-drift",
+        action="store_true",
+        help=(
+            f"Run only the checks that need no dependency — cells parse, no leaked key. "
+            f"For when {PACKAGE} cannot be installed at all, not for when it is installed "
+            f"and the notebook disagrees with it."
+        ),
+    )
+    args = parser.parse_args(argv[1:])
+    path = Path(args.notebook)
 
     try:
         notebook = load_notebook(path)
         cells = code_cells(notebook)
         trees = parse_cells(cells)
-        checked = check_drift(trees)
+        checked = None if args.skip_drift else check_drift(trees)
         check_secrets(notebook)
     except CheckFailed as e:
         print(f"FAIL: {e}", file=sys.stderr)
         return 1
 
-    version = getattr(__import__(PACKAGE), "__version__", "?")
     print(f"OK: {path.name} — {len(cells)} code cells parse")
-    print(f"OK: {checked} {PACKAGE} names resolve against {PACKAGE} {version}")
+    if checked is None:
+        print(f"SKIPPED: drift check ({PACKAGE} not installed)")
+    else:
+        version = getattr(__import__(PACKAGE), "__version__", "?")
+        print(f"OK: {checked} {PACKAGE} names resolve against {PACKAGE} {version}")
     print("OK: no API key found in sources or outputs")
     return 0
 
